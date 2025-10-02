@@ -10,7 +10,7 @@
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-    "types": ["node", "./types/custom.d.ts"]  // <-- add this line
+    "types": []  // <-- add this line
   },
   "include": ["src"]
 }
