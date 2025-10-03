@@ -3,6 +3,7 @@ import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
 import '../index.css';
 
+// Types
 interface User {
   _id: string;
   name: string;
@@ -18,11 +19,10 @@ interface Note {
 }
 
 export interface ApiResponse<T> {
-  data: T;             // now T can be User, Note[], Note, etc.
+  data: T;
   status: number;
   message?: string;
 }
-
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
@@ -38,71 +38,70 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
   const nav = useNavigate();
 
-const fetchUser = useCallback(async () => {
-  try {
-    const res = await api.get<ApiResponse<User>>("/auth/me");
-    if (!res.data.data) {
+  // Fetch user
+  const fetchUser = useCallback(async () => {
+    try {
+      const res = await api.get<ApiResponse<User>>("/auth/me");
+      const userData = res.data.data;
+      if (!userData) {
+        nav("/login");
+        return;
+      }
+      setUser(userData);
+    } catch (err) {
+      setError("Failed to fetch user data");
       nav("/login");
-      return;
+    } finally {
+      setLoading(false);
     }
-    setUser(res.data.data);
-  } catch (err) {
-    setError("Failed to fetch user data");
-    nav("/login");
-  } finally {
-    setLoading(false);
-  }
-}, [nav]);
+  }, [nav]);
 
-const fetchNotes = useCallback(async () => {
-  if (!user) return;
-  try {
-    const res = await api.get<ApiResponse<Note[]>>("/notes");
-    setNotes(res.data.data || []);
-  } catch (err) {
-    setError("Failed to fetch notes");
-  } finally {
-    setLoading(false);
-  }
-}, [user]);
+  // Fetch notes
+  const fetchNotes = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await api.get<ApiResponse<Note[]>>("/notes");
+      const notesData = res.data.data;
+      setNotes(notesData || []);
+    } catch (err) {
+      setError("Failed to fetch notes");
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-const createNote = useCallback(async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!title.trim()) return;
-  try {
-    setError(null);
-    const res = await api.post<ApiResponse<Note>>("/notes", {
-      title: title.trim(),
-      body: body.trim(),
-    });
-    setNotes((prev) => [res.data.data, ...prev]);
-    setTitle("");
-    setBody("");
-  } catch (err) {
-    setError("Failed to create note");
-  }
-}, [title, body]);
+  // Create note
+  const createNote = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    try {
+      setError(null);
+      const res = await api.post<ApiResponse<Note>>("/notes", { title: title.trim(), body: body.trim() });
+      setNotes(prev => [res.data.data, ...prev]);
+      setTitle("");
+      setBody("");
+    } catch (err) {
+      setError("Failed to create note");
+    }
+  }, [title, body]);
 
-const updateNote = useCallback(async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!editingNote || !title.trim()) return;
-  try {
-    setError(null);
-    const res = await api.put<ApiResponse<Note>>(
-      `/notes/${editingNote._id}`,
-      { title: title.trim(), body: body.trim() }
-    );
-    setNotes((prev) =>
-      prev.map((n) => (n._id === editingNote._id ? res.data.data : n))
-    );
-    setTitle("");
-    setBody("");
-    setEditingNote(null);
-    setShowEditModal(false);
-  } catch (err) {
-    setError("Failed to update note");
-  }
-}, [title, body, editingNote]);
+  // Update note
+  const updateNote = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNote || !title.trim()) return;
+    try {
+      setError(null);
+      const res = await api.put<ApiResponse<Note>>(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
+      setNotes(prev => prev.map(n => n._id === editingNote._id ? res.data.data : n));
+      setTitle("");
+      setBody("");
+      setEditingNote(null);
+      setShowEditModal(false);
+    } catch (err) {
+      setError("Failed to update note");
+    }
+  }, [title, body, editingNote]);
+
 
 
   const handleEdit = useCallback((note: Note) => {
