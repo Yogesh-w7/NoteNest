@@ -42,12 +42,11 @@ export default function Dashboard() {
   const fetchUser = useCallback(async () => {
     try {
       const res = await api.get<ApiResponse<User>>("/auth/me");
-      const userData = res.data.data; // ✅ always use res.data.data
-      if (!userData) {
+      if (!res.data) {
         nav("/login");
         return;
       }
-      setUser(userData);
+      setUser(res.data);
     } catch (err) {
       setError("Failed to fetch user data");
       nav("/login");
@@ -61,8 +60,7 @@ export default function Dashboard() {
     if (!user) return;
     try {
       const res = await api.get<ApiResponse<Note[]>>("/notes");
-      const notesData = res.data.data; // ✅ use data.data
-      setNotes(notesData || []);
+      setNotes(res.data || []);
     } catch (err) {
       setError("Failed to fetch notes");
     }
@@ -75,7 +73,7 @@ export default function Dashboard() {
     try {
       setError(null);
       const res = await api.post<ApiResponse<Note>>("/notes", { title: title.trim(), body: body.trim() });
-      setNotes(prev => [res.data.data, ...prev]); // ✅ use data.data
+      setNotes(prev => [res.data, ...prev]);
       setTitle("");
       setBody("");
     } catch (err) {
@@ -90,7 +88,7 @@ export default function Dashboard() {
     try {
       setError(null);
       const res = await api.put<ApiResponse<Note>>(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
-      setNotes(prev => prev.map(n => n._id === editingNote._id ? res.data.data : n)); // ✅ use data.data
+      setNotes(prev => prev.map(n => n._id === editingNote._id ? res.data : n));
       setTitle("");
       setBody("");
       setEditingNote(null);
