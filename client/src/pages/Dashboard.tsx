@@ -17,10 +17,12 @@ interface Note {
   userId: string;
 }
 
-interface ApiResponse<T> {
-  data: { [key: string]: T };
+export interface ApiResponse<T> {
+  data: T;             // now T can be User, Note[], Note, etc.
   status: number;
+  message?: string;
 }
+
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
