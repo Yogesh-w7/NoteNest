@@ -17,9 +17,12 @@ interface Note {
   userId: string;
 }
 
-interface ApiResponse<T> {
-  data: { [key: string]: T };
-  status: number;
+export interface ApiResponse<T> {
+  // Wraps the actual data properties
+  user?: T;        // For user responses
+  notes?: T[];     // For notes array
+  note?: T;        // For single note
+  message?: string; // optional message
 }
 
 export default function Dashboard() {
