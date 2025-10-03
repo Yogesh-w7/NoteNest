@@ -39,58 +39,23 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
   const nav = useNavigate();
 
-  const fetchUser = useCallback(async () => {
-    try {
-      const res = await api.get<ApiResponse<User>>("/auth/me");
-      if (!res.data.user) {
-        nav("/login");
-        return;
-      }
-      setUser(res.data.user);
-    } catch (err) {
-      setError("Failed to fetch user data");
-      nav("/login");
-    }
-  }, [nav]);
+  
+const fetchUser = async () => {
+  const res = await api.get<ApiResponse<User>>("/me");
+  return res.data.user; // ✅ TypeScript now knows 'user' exists
+};
 
-  const fetchNotes = useCallback(async () => {
-    if (!user) return;
-    try {
-      const res = await api.get<ApiResponse<Note[]>>("/notes");
-      setNotes(res.data.notes || []);
-    } catch (err) {
-      setError("Failed to fetch notes");
-    }
-  }, [user]);
+// Fetch notes
+const fetchNotes = async () => {
+  const res = await api.get<ApiResponse<Note[]>>("/notes");
+  return res.data.notes; // ✅ TypeScript now knows 'notes' exists
+};
 
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await fetchUser();
-      setLoading(false);
-    };
-    init();
-  }, [fetchUser]);
+ const createNote = async (payload: { title: string; content: string }) => {
+  const res = await api.post<ApiResponse<Note>>("/notes", payload);
+  return res.data.note; // ✅ 'note' now exists
+};
 
-  useEffect(() => {
-    if (user) {
-      fetchNotes();
-    }
-  }, [user, fetchNotes]);
-
-  const createNote = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    try {
-      setError(null);
-      const res = await api.post<ApiResponse<Note>>("/notes", { title: title.trim(), body: body.trim() });
-      setNotes(prev => [res.data.note, ...prev]);
-      setTitle("");
-      setBody("");
-    } catch (err) {
-      setError("Failed to create note");
-    }
-  }, [title, body]);
 
   const updateNote = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
