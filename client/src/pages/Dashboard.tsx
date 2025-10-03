@@ -49,6 +49,8 @@ const fetchUser = useCallback(async () => {
   } catch (err) {
     setError("Failed to fetch user data");
     nav("/login");
+  } finally {
+    setLoading(false);
   }
 }, [nav]);
 
@@ -102,15 +104,6 @@ const updateNote = useCallback(async (e: React.FormEvent) => {
   }
 }, [title, body, editingNote]);
 
-useEffect(() => {
-  fetchUser();
-}, [fetchUser]);
-
-useEffect(() => {
-  if (user) {
-    fetchNotes();
-  }
-}, [user, fetchNotes]);
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
@@ -164,6 +157,16 @@ useEffect(() => {
       nav("/login");
     }
   }, [nav]);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
+  useEffect(() => {
+    if (user) {
+      fetchNotes();
+    }
+  }, [user, fetchNotes]);
 
   if (loading) {
     return (
