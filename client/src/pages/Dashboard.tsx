@@ -42,12 +42,15 @@ export default function Dashboard() {
   const fetchUser = useCallback(async () => {
     try {
       const res = await api.get<ApiResponse<User>>("/auth/me");
-      if (!res.data) {
+      // res is AxiosResponse<ApiResponse<User>>
+      const userData = res.data?.data ?? null;
+      if (!userData) {
         nav("/login");
         return;
       }
-      setUser(res.data);
+      setUser(userData);
     } catch (err) {
+      // keep a friendly error message
       setError("Failed to fetch user data");
       nav("/login");
     } finally {
@@ -55,25 +58,27 @@ export default function Dashboard() {
     }
   }, [nav]);
 
-  // Fetch notes
+  // --- Fetch notes ---
   const fetchNotes = useCallback(async () => {
     if (!user) return;
     try {
       const res = await api.get<ApiResponse<Note[]>>("/notes");
-      setNotes(res.data || []);
+      const notesData = res.data?.data ?? [];
+      setNotes(notesData);
     } catch (err) {
       setError("Failed to fetch notes");
     }
   }, [user]);
 
-  // Create note
+  // --- Create note ---
   const createNote = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
     try {
       setError(null);
       const res = await api.post<ApiResponse<Note>>("/notes", { title: title.trim(), body: body.trim() });
-      setNotes(prev => [res.data, ...prev]);
+      const newNote = res.data?.data;
+      if (newNote) setNotes(prev => [newNote, ...prev]);
       setTitle("");
       setBody("");
     } catch (err) {
@@ -81,14 +86,17 @@ export default function Dashboard() {
     }
   }, [title, body]);
 
-  // Update note
+  // --- Update note ---
   const updateNote = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingNote || !title.trim()) return;
     try {
       setError(null);
       const res = await api.put<ApiResponse<Note>>(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
-      setNotes(prev => prev.map(n => n._id === editingNote._id ? res.data : n));
+      const updated = res.data?.data;
+      if (updated) {
+        setNotes(prev => prev.map(n => n._id === editingNote._id ? updated : n));
+      }
       setTitle("");
       setBody("");
       setEditingNote(null);
@@ -98,10 +106,11 @@ export default function Dashboard() {
     }
   }, [title, body, editingNote]);
 
+  // --- Edit/delete helpers ---
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
     setTitle(note.title);
-    setBody(note.body || "");
+    setBody(note.body ?? "");
     setShowEditModal(true);
   }, []);
 
@@ -136,9 +145,7 @@ export default function Dashboard() {
 
   const deleteNote = useCallback((id: string) => {
     const note = notes.find(n => n._id === id);
-    if (note) {
-      openDeleteModal(note);
-    }
+    if (note) openDeleteModal(note);
   }, [notes, openDeleteModal]);
 
   const logout = useCallback(async () => {
@@ -150,7 +157,6 @@ export default function Dashboard() {
       nav("/login");
     }
   }, [nav]);
-
   useEffect(() => { fetchUser(); }, [fetchUser]);
   useEffect(() => { if (user) fetchNotes(); }, [user, fetchNotes]);
 
