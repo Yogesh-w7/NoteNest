@@ -3,7 +3,6 @@ import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
 import '../index.css';
 
-// types
 interface User {
   _id: string;
   name: string;
@@ -19,12 +18,10 @@ interface Note {
 }
 
 export interface ApiResponse<T> {
-  data: T;         // the actual payload
+  data: T;             // now T can be User, Note[], Note, etc.
   status: number;
   message?: string;
 }
-
-
 
 
 export default function Dashboard() {
@@ -41,12 +38,9 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
   const nav = useNavigate();
 
-
-/// fetch user
 const fetchUser = useCallback(async () => {
   try {
     const res = await api.get<ApiResponse<User>>("/auth/me");
-    // ✅ Use res.data.data instead of res.data.user
     if (!res.data.data) {
       nav("/login");
       return;
@@ -60,12 +54,10 @@ const fetchUser = useCallback(async () => {
   }
 }, [nav]);
 
-// fetch notes
 const fetchNotes = useCallback(async () => {
   if (!user) return;
   try {
     const res = await api.get<ApiResponse<Note[]>>("/notes");
-    // ✅ Use res.data.data instead of res.data.notes
     setNotes(res.data.data || []);
   } catch (err) {
     setError("Failed to fetch notes");
@@ -74,7 +66,6 @@ const fetchNotes = useCallback(async () => {
   }
 }, [user]);
 
-// create note
 const createNote = useCallback(async (e: React.FormEvent) => {
   e.preventDefault();
   if (!title.trim()) return;
@@ -84,8 +75,7 @@ const createNote = useCallback(async (e: React.FormEvent) => {
       title: title.trim(),
       body: body.trim(),
     });
-    // ✅ Use res.data.data instead of res.data.note
-    setNotes(prev => [res.data.data, ...prev]);
+    setNotes((prev) => [res.data.data, ...prev]);
     setTitle("");
     setBody("");
   } catch (err) {
@@ -93,7 +83,6 @@ const createNote = useCallback(async (e: React.FormEvent) => {
   }
 }, [title, body]);
 
-// update note
 const updateNote = useCallback(async (e: React.FormEvent) => {
   e.preventDefault();
   if (!editingNote || !title.trim()) return;
@@ -103,9 +92,8 @@ const updateNote = useCallback(async (e: React.FormEvent) => {
       `/notes/${editingNote._id}`,
       { title: title.trim(), body: body.trim() }
     );
-    // ✅ Use res.data.data instead of res.data.note
-    setNotes(prev =>
-      prev.map(n => n._id === editingNote._id ? res.data.data : n)
+    setNotes((prev) =>
+      prev.map((n) => (n._id === editingNote._id ? res.data.data : n))
     );
     setTitle("");
     setBody("");
