@@ -5,9 +5,5 @@ const api = axios.create({
   withCredentials: true,
 });
 
-api.interceptors.response.use(
-  (response) => response.data, // always return just the backend response JSON
-  (error) => Promise.reject(error)
-);
-
+// REMOVE interceptor that strips data
 export default api;
