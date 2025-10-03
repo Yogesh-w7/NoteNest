@@ -1,9 +1,9 @@
+// src/pages/Dashboard.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
-import '../index.css';
+import "../index.css";
 
-// Types
 interface User {
   _id: string;
   name: string;
@@ -18,50 +18,28 @@ interface Note {
   userId: string;
 }
 
-export interface ApiResponse<T> {
-  data: T;
-  status: number;
-  message?: string;
-}
+/** Safe payload extractor (handles res.data.data, res.data.user/note/notes, or raw payload) */
+function extractPayload<T>(response: any): T | null {
+  if (!response) return null;
+  // AxiosResponse: actual payload often sits under response.data
+  const d = response.data ?? response;
 
-/**
- * Helper to extract the meaningful payload from different response shapes.
- * Accepts:
- *  - AxiosResponse<ApiResponse<T>> (res.data.data)
- *  - AxiosResponse<{ user: T } | { note: T } | { notes: T[] } > (res.data.user / note / notes)
- *  - plain { data: T } or { user: T } objects
- */
-function extractPayload<T>(res: any): T | null {
-  if (!res) return null;
+  if (!d) return null;
 
-  // If full Axios response with `data` field
-  if (res.data !== undefined) {
-    const d = res.data;
+  // Preferred nested shape: { data: <payload> }
+  if (d.data !== undefined) return d.data as T;
 
-    // support nested ApiResponse: { data: T }
-    if (d && d.data !== undefined) {
-      return d.data as T;
-    }
+  // Legacy shapes: { user: <payload> } | { note: <payload> } | { notes: <payload[]> }
+  if ((d as any).user !== undefined) return (d as any).user as T;
+  if ((d as any).note !== undefined) return (d as any).note as T;
+  if ((d as any).notes !== undefined) return (d as any).notes as unknown as T;
 
-    // support { user: T } or { note: T } or { notes: T[] } shapes
-    if (d && (d.user !== undefined || d.note !== undefined || d.notes !== undefined)) {
-      return (d.user ?? d.note ?? d.notes) as T;
-    }
-
-    // fallback to res.data itself being the payload
-    return d as T;
-  }
-
-  // support plain objects (not wrapped)
-  if (res.user !== undefined) return res.user as T;
-  if (res.note !== undefined) return res.note as T;
-  if (res.notes !== undefined) return res.notes as T;
-  if (res.data !== undefined) return res.data as T;
-
-  return null;
+  // Otherwise, assume d itself is the payload
+  return d as T;
 }
 
 export default function Dashboard() {
+  const nav = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [title, setTitle] = useState("");
@@ -72,13 +50,11 @@ export default function Dashboard() {
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
-  const nav = useNavigate();
+  const [viewMode, setViewMode] = useState<"horizontal" | "vertical">("horizontal");
 
-  // Fetch user
   const fetchUser = useCallback(async () => {
     try {
-      const res = await api.get("/auth/me"); // res is AxiosResponse<...>
+      const res = await api.get("/auth/me");
       const userData = extractPayload<User>(res);
       if (!userData) {
         nav("/login");
@@ -93,58 +69,56 @@ export default function Dashboard() {
     }
   }, [nav]);
 
-  // Fetch notes
   const fetchNotes = useCallback(async () => {
     if (!user) return;
     try {
       const res = await api.get("/notes");
-      const notesData = extractPayload<Note[] | Note>(res);
-      // If backend returned a single note, coerce to array
-      if (!notesData) {
-        setNotes([]);
-      } else if (Array.isArray(notesData)) {
-        setNotes(notesData);
-      } else {
-        setNotes([notesData]);
-      }
+      const payload = extractPayload<Note[] | Note>(res);
+      if (!payload) setNotes([]);
+      else if (Array.isArray(payload)) setNotes(payload);
+      else setNotes([payload]);
     } catch (err) {
       setError("Failed to fetch notes");
     }
   }, [user]);
 
-  // Create note
-  const createNote = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    try {
-      setError(null);
-      const res = await api.post("/notes", { title: title.trim(), body: body.trim() });
-      const newNote = extractPayload<Note>(res);
-      if (newNote) setNotes(prev => [newNote, ...prev]);
-      setTitle("");
-      setBody("");
-    } catch (err) {
-      setError("Failed to create note");
-    }
-  }, [title, body]);
+  const createNote = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!title.trim()) return;
+      try {
+        setError(null);
+        const res = await api.post("/notes", { title: title.trim(), body: body.trim() });
+        const newNote = extractPayload<Note>(res);
+        if (newNote) setNotes((p) => [newNote, ...p]);
+        setTitle("");
+        setBody("");
+      } catch {
+        setError("Failed to create note");
+      }
+    },
+    [title, body]
+  );
 
-  // Update note
-  const updateNote = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingNote || !title.trim()) return;
-    try {
-      setError(null);
-      const res = await api.put(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
-      const updated = extractPayload<Note>(res);
-      if (updated) setNotes(prev => prev.map(n => n._id === editingNote._id ? updated : n));
-      setTitle("");
-      setBody("");
-      setEditingNote(null);
-      setShowEditModal(false);
-    } catch (err) {
-      setError("Failed to update note");
-    }
-  }, [title, body, editingNote]);
+  const updateNote = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editingNote || !title.trim()) return;
+      try {
+        setError(null);
+        const res = await api.put(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
+        const updated = extractPayload<Note>(res);
+        if (updated) setNotes((p) => p.map((n) => (n._id === editingNote._id ? updated : n)));
+        setTitle("");
+        setBody("");
+        setEditingNote(null);
+        setShowEditModal(false);
+      } catch {
+        setError("Failed to update note");
+      }
+    },
+    [title, body, editingNote]
+  );
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
@@ -174,18 +148,21 @@ export default function Dashboard() {
     if (!noteToDelete) return;
     try {
       setError(null);
-      await api.delete(`/notes/${noteToDelete._1 ?? noteToDelete._id}`.replace("_1", "_id")); // fallback for weird shapes
-      setNotes(prev => prev.filter(n => n._id !== noteToDelete._id));
+      await api.delete(`/notes/${noteToDelete._id}`);
+      setNotes((p) => p.filter((n) => n._id !== noteToDelete._id));
       closeDeleteModal();
-    } catch (err) {
+    } catch {
       setError("Failed to delete note");
     }
   }, [noteToDelete, closeDeleteModal]);
 
-  const deleteNote = useCallback((id: string) => {
-    const note = notes.find(n => n._id === id);
-    if (note) openDeleteModal(note);
-  }, [notes, openDeleteModal]);
+  const deleteNote = useCallback(
+    (id: string) => {
+      const n = notes.find((x) => x._id === id);
+      if (n) openDeleteModal(n);
+    },
+    [notes, openDeleteModal]
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -197,90 +174,91 @@ export default function Dashboard() {
     }
   }, [nav]);
 
-  useEffect(() => { fetchUser(); }, [fetchUser]);
-  useEffect(() => { if (user) fetchNotes(); }, [user, fetchNotes]);
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
 
-  if (loading) {
+  useEffect(() => {
+    if (user) fetchNotes();
+  }, [user, fetchNotes]);
+
+  if (loading)
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
-  }
 
-  if (error) {
+  if (error)
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold text-red-600 mb-4">Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button onClick={() => window.location.reload()} className="px-6 py-2 bg-blue-600 text-white rounded-lg">Retry</button>
+          <button onClick={() => window.location.reload()} className="px-6 py-2 bg-blue-600 text-white rounded-lg">
+            Retry
+          </button>
         </div>
       </div>
     );
-  }
 
   return (
     <>
       <div className="p-4 sm:p-6 min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-        {/* Header */}
-        <header className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-6 lg:mb-8 gap-4">
-          <div className="flex-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">
-              Welcome{user ? `, ${user.name}` : ""}!
-            </h1>
-            <p className="text-sm sm:text-base text-gray-600 font-medium">{user?.email}</p>
+        <header className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-6 gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">{user ? `Welcome, ${user.name}` : "Welcome"}</h1>
+            <p className="text-sm text-gray-600">{user?.email}</p>
           </div>
-          <button onClick={logout} className="px-6 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl">Logout</button>
+          <button onClick={logout} className="px-4 py-2 bg-red-500 text-white rounded">Logout</button>
         </header>
 
-        {/* Create Note Form */}
-        <main className="space-y-6 lg:space-y-8">
-          <form onSubmit={createNote} className="bg-white/80 p-6 rounded-2xl shadow-lg border border-white/20">
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter a catchy title..." className="w-full p-4 rounded-xl mb-4" />
-            <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="What's on your mind?" rows={3} className="w-full p-4 rounded-xl mb-4" />
-            <button type="submit" disabled={!title.trim()} className="w-full px-6 py-3 bg-green-600 text-white rounded-xl">✨ Create Note</button>
+        <main className="space-y-6">
+          <form onSubmit={createNote} className="bg-white p-6 rounded shadow">
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full p-3 mb-3 border rounded" />
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder="Body" className="w-full p-3 mb-3 border rounded" />
+            <button type="submit" disabled={!title.trim()} className="px-4 py-2 bg-green-600 text-white rounded">
+              Create
+            </button>
           </form>
 
-          {/* Notes Section */}
-          <section className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">📝 Your Notes ({notes.length})</h2>
-              <button onClick={() => setViewMode(v => v === 'horizontal' ? 'vertical' : 'horizontal')} className="px-4 py-2 bg-indigo-500 text-white rounded-xl">
-                {viewMode === 'horizontal' ? 'Show All Notes' : 'Horizontal View'}
+          <section>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Your Notes ({notes.length})</h2>
+              <button onClick={() => setViewMode((v) => (v === "horizontal" ? "vertical" : "horizontal"))} className="px-3 py-1 bg-indigo-500 text-white rounded">
+                {viewMode === "horizontal" ? "Show All Notes" : "Horizontal View"}
               </button>
             </div>
 
             {notes.length === 0 ? (
-              <div className="text-center py-12 bg-white/60 rounded-2xl border border-dashed border-gray-300">
-                <p className="text-lg text-gray-500">No notes yet!</p>
-                <p className="text-sm text-gray-500">Start by creating your first note above.</p>
-              </div>
-            ) : viewMode === 'horizontal' ? (
+              <div className="p-6 bg-white rounded border-dashed border">No notes yet</div>
+            ) : viewMode === "horizontal" ? (
               <div className="flex overflow-x-auto space-x-4 pb-4">
-                {notes.map(n => (
-                  <article key={n._id} className="bg-white p-5 rounded-2xl shadow-lg min-w-[300px] relative">
-                    <button onClick={() => deleteNote(n._id)} className="absolute top-3 right-3">✕</button>
-                    <h3 className="font-bold text-lg mb-3">{n.title}</h3>
-                    <p className="text-gray-600 mb-4">{n.body || "No body text"}</p>
-                    <footer className="flex justify-between items-center text-xs text-gray-500">
-                      <time dateTime={n.createdAt}>{new Date(n.createdAt).toLocaleString()}</time>
-                      <button onClick={() => handleEdit(n)} className="text-blue-500">✏️ Edit</button>
-                    </footer>
+                {notes.map((n) => (
+                  <article key={n._id} className="bg-white p-5 rounded shadow min-w-[280px] relative">
+                    <button onClick={() => deleteNote(n._1 ?? n._id)} className="absolute top-2 right-2">✕</button>
+                    <h3 className="font-bold">{n.title}</h3>
+                    <p className="text-gray-600">{n.body}</p>
+                    <div className="text-xs text-gray-400 mt-2">{new Date(n.createdAt).toLocaleString()}</div>
+                    <button onClick={() => handleEdit(n)} className="text-blue-500 mt-2">Edit</button>
                   </article>
                 ))}
               </div>
             ) : (
-              <div className="max-h-[60vh] overflow-y-auto space-y-4 pr-2">
-                {notes.map(n => (
-                  <article key={n._id} className="bg-white p-5 rounded-2xl shadow-lg w-full relative">
-                    <button onClick={() => deleteNote(n._id)} className="absolute top-3 right-3">✕</button>
-                    <h3 className="font-bold text-lg mb-3">{n.title}</h3>
-                    <p className="text-gray-600 mb-4">{n.body || "No body text"}</p>
-                    <footer className="flex justify-between items-center text-xs text-gray-500">
-                      <time dateTime={n.createdAt}>{new Date(n.createdAt).toLocaleString()}</time>
-                      <button onClick={() => handleEdit(n)} className="text-blue-500">✏️ Edit</button>
-                    </footer>
+              <div className="space-y-4">
+                {notes.map((n) => (
+                  <article key={n._id} className="bg-white p-5 rounded shadow">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-bold">{n.title}</h3>
+                        <p className="text-gray-600">{n.body}</p>
+                        <div className="text-xs text-gray-400 mt-2">{new Date(n.createdAt).toLocaleString()}</div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <button onClick={() => handleEdit(n)} className="text-blue-500">Edit</button>
+                        <button onClick={() => deleteNote(n._id)} className="text-red-500">Delete</button>
+                      </div>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -289,34 +267,31 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* Delete Modal */}
+      {/* Delete modal */}
       {showDeleteModal && noteToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="text-red-500 text-2xl">🗑️</span>
-              <h3 className="text-lg font-bold">Delete Note?</h3>
-            </div>
-            <p className="text-gray-600 mb-6">Are you sure you want to delete "{noteToDelete.title}"? This action cannot be undone.</p>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="font-bold mb-2">Delete Note?</h3>
+            <p className="text-sm mb-4">Delete "{noteToDelete.title}"?</p>
             <div className="flex gap-3 justify-end">
-              <button onClick={closeDeleteModal} className="px-4 py-2 bg-gray-200 rounded-xl">Cancel</button>
-              <button onClick={confirmDeleteNote} className="px-4 py-2 bg-red-500 text-white rounded-xl">Delete</button>
+              <button onClick={closeDeleteModal} className="px-3 py-1 bg-gray-200 rounded">Cancel</button>
+              <button onClick={confirmDeleteNote} className="px-3 py-1 bg-red-500 text-white rounded">Delete</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Modal */}
+      {/* Edit modal */}
       {showEditModal && editingNote && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="text-lg font-bold mb-4">Edit Note</h3>
-            <form onSubmit={updateNote} className="space-y-4">
-              <input value={title} onChange={e => setTitle(e.target.value)} className="w-full p-3 border rounded-xl" />
-              <textarea value={body} onChange={e => setBody(e.target.value)} rows={4} className="w-full p-3 border rounded-xl" />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow max-w-md w-full">
+            <h3 className="font-bold mb-2">Edit Note</h3>
+            <form onSubmit={updateNote} className="space-y-3">
+              <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full p-3 border rounded" />
+              <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} className="w-full p-3 border rounded" />
               <div className="flex justify-end gap-3">
-                <button type="button" onClick={closeEditModal} className="px-4 py-2 bg-gray-200 rounded-xl">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-blue-500 text-white rounded-xl">Save</button>
+                <button type="button" onClick={closeEditModal} className="px-3 py-1 bg-gray-200 rounded">Cancel</button>
+                <button type="submit" className="px-3 py-1 bg-blue-500 text-white rounded">Save</button>
               </div>
             </form>
           </div>
