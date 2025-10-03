@@ -5,14 +5,8 @@ const api = axios.create({
   withCredentials: true,
 });
 
-
 api.interceptors.response.use(
-  (response) => {
-    if (response.data && response.data.data !== undefined) {
-      return response.data.data; // return only useful data
-    }
-    return response.data;
-  },
+  (response) => response.data, // always return just the backend response JSON
   (error) => Promise.reject(error)
 );
 
