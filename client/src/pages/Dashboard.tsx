@@ -42,11 +42,12 @@ export default function Dashboard() {
   const nav = useNavigate();
 
 
-// fetch user
+/// fetch user
 const fetchUser = useCallback(async () => {
   try {
     const res = await api.get<ApiResponse<User>>("/auth/me");
-    if (!res.data.data) {       // ✅ always use data.data
+    // ✅ Use res.data.data instead of res.data.user
+    if (!res.data.data) {
       nav("/login");
       return;
     }
@@ -64,7 +65,8 @@ const fetchNotes = useCallback(async () => {
   if (!user) return;
   try {
     const res = await api.get<ApiResponse<Note[]>>("/notes");
-    setNotes(res.data.data || []);   // ✅ use data.data
+    // ✅ Use res.data.data instead of res.data.notes
+    setNotes(res.data.data || []);
   } catch (err) {
     setError("Failed to fetch notes");
   } finally {
@@ -82,7 +84,8 @@ const createNote = useCallback(async (e: React.FormEvent) => {
       title: title.trim(),
       body: body.trim(),
     });
-    setNotes(prev => [res.data.data, ...prev]);  // ✅ use data.data
+    // ✅ Use res.data.data instead of res.data.note
+    setNotes(prev => [res.data.data, ...prev]);
     setTitle("");
     setBody("");
   } catch (err) {
@@ -100,8 +103,9 @@ const updateNote = useCallback(async (e: React.FormEvent) => {
       `/notes/${editingNote._id}`,
       { title: title.trim(), body: body.trim() }
     );
+    // ✅ Use res.data.data instead of res.data.note
     setNotes(prev =>
-      prev.map(n => n._id === editingNote._id ? res.data.data : n) // ✅ use data.data
+      prev.map(n => n._id === editingNote._id ? res.data.data : n)
     );
     setTitle("");
     setBody("");
