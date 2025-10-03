@@ -3,14 +3,13 @@ import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
 import '../index.css';
 
-// src/types.ts
-export interface User {
+interface User {
   _id: string;
   name: string;
   email: string;
 }
 
-export interface Note {
+interface Note {
   _id: string;
   title: string;
   body?: string;
@@ -18,28 +17,18 @@ export interface Note {
   userId: string;
 }
 
-// Endpoint responses
-export interface UserResponse {
+// Explicit endpoint responses
+interface UserResponse {
   user: User;
   message?: string;
 }
-
-export interface NotesResponse {
+interface NotesResponse {
   notes: Note[];
   message?: string;
 }
-
-export interface NoteResponse {
+interface NoteResponse {
   note: Note;
   message?: string;
-}
-
-export interface ApiResponse<T> {
-  // Wraps the actual data properties
-  user?: T;        // For user responses
-  notes?: T[];     // For notes array
-  note?: T;        // For single note
-  message?: string; // optional message
 }
 
 export default function Dashboard() {
@@ -56,31 +45,84 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
   const nav = useNavigate();
 
-  
-// Fetch user
-const fetchUser = async () => {
-  const res = await api.get<UserResponse>("/me");
-  return res.data.user; // ✅ TS knows 'user' exists
-};
+  // --- API helpers (typed) ---
+  const fetchUserApi = async (): Promise<User> => {
+    const res = await api.get<UserResponse>("/me");
+    return res.data.user;
+  };
 
-// Fetch notes
-const fetchNotes = async () => {
-  const res = await api.get<NotesResponse>("/notes");
-  return res.data.notes; // ✅ TS knows 'notes' exists
-};
+  const fetchNotesApi = async (): Promise<Note[]> => {
+    const res = await api.get<NotesResponse>("/notes");
+    return res.data.notes;
+  };
 
-// Create note
-const createNote = async (payload: { title: string; content: string }) => {
-  const res = await api.post<NoteResponse>("/notes", payload);
-  return res.data.note; // ✅ TS knows 'note' exists
-};
+  const createNoteApi = async (payload: { title: string; body?: string }): Promise<Note> => {
+    const res = await api.post<NoteResponse>("/notes", payload);
+    return res.data.note;
+  };
 
-// Update note
-const updateNote = async (id: string, payload: { title: string; body: string }) => {
-  const res = await api.put<NoteResponse>(`/notes/${id}`, payload);
-  return res.data.note;
-};
+  const updateNoteApi = async (id: string, payload: { title: string; body?: string }): Promise<Note> => {
+    const res = await api.put<NoteResponse>(`/notes/${id}`, payload);
+    return res.data.note;
+  };
 
+  // --- Fetch on mount ---
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [u, ns] = await Promise.all([fetchUserApi(), fetchNotesApi()]);
+        if (!mounted) return;
+        setUser(u);
+        setNotes(ns);
+      } catch (err) {
+        setError("Failed to load dashboard. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // --- Create note (form submit handler) ---
+  const handleCreateNote = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    try {
+      setError(null);
+      const newNote = await createNoteApi({ title: title.trim(), body: body.trim() || undefined });
+      // prepend the new note
+      setNotes(prev => [newNote, ...prev]);
+      setTitle("");
+      setBody("");
+    } catch (err) {
+      setError("Failed to create note");
+    }
+  }, [title, body]);
+
+  // --- Update note (form submit handler inside edit modal) ---
+  const handleUpdateNote = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNote) return;
+    if (!title.trim()) {
+      setError("Title required");
+      return;
+    }
+    try {
+      setError(null);
+      const updated = await updateNoteApi(editingNote._id, { title: title.trim(), body: body.trim() || undefined });
+      setNotes(prev => prev.map(n => (n._id === updated._id ? updated : n)));
+      // close edit modal
+      setEditingNote(null);
+      setShowEditModal(false);
+      setTitle("");
+      setBody("");
+    } catch (err) {
+      setError("Failed to update note");
+    }
+  }, [editingNote, title, body]);
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
@@ -120,16 +162,14 @@ const updateNote = async (id: string, payload: { title: string; body: string }) 
 
   const deleteNote = useCallback((id: string) => {
     const note = notes.find(n => n._id === id);
-    if (note) {
-      openDeleteModal(note);
-    }
+    if (note) openDeleteModal(note);
   }, [notes, openDeleteModal]);
 
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
-    } catch (err) {
-      // Ignore logout errors
+    } catch {
+      // ignore
     } finally {
       nav("/login");
     }
@@ -183,7 +223,7 @@ const updateNote = async (id: string, payload: { title: string; body: string }) 
         {/* Create Note Form */}
         <main className="space-y-6 lg:space-y-8">
           <form
-            onSubmit={createNote}
+            onSubmit={handleCreateNote}
             className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20"
           >
             <div className="space-y-4">
@@ -233,6 +273,7 @@ const updateNote = async (id: string, payload: { title: string; body: string }) 
                 {viewMode === 'horizontal' ? 'Show All Notes' : 'Horizontal View'}
               </button>
             </div>
+
             {notes.length === 0 ? (
               <div className="text-center py-12 bg-white/60 backdrop-blur-sm rounded-2xl border border-dashed border-gray-300">
                 <div className="text-gray-500 space-y-2">
@@ -243,78 +284,36 @@ const updateNote = async (id: string, payload: { title: string; body: string }) 
             ) : viewMode === 'horizontal' ? (
               <div className="flex overflow-x-auto space-x-4 pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
                 {notes.map((n) => (
-                  <article
-                    key={n._id}
-                    className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 min-w-[300px] flex-shrink-0"
-                  >
+                  <article key={n._id} className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 min-w-[300px] flex-shrink-0">
                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <button
-                        onClick={() => deleteNote(n._id)}
-                        className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200"
-                        aria-label="Delete note"
-                      >
-                        <span className="sr-only">Delete</span>
-                        ✕
-                      </button>
+                      <button onClick={() => deleteNote(n._id)} className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200" aria-label="Delete note">✕</button>
                     </div>
-                    <h3 className="font-bold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-300">
-                      {n.title}
-                    </h3>
-                    <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">
-                      {n.body || "No body text"}
-                    </p>
+                    <h3 className="font-bold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-300">{n.title}</h3>
+                    <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">{n.body || "No body text"}</p>
                     <footer className="flex justify-between items-center text-xs text-gray-500 font-medium pt-2 border-t border-gray-100">
                       <time dateTime={n.createdAt}>
                         {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </time>
-                      <button
-                        onClick={() => handleEdit(n)}
-                        className="text-blue-500 hover:text-blue-600 transition-colors duration-200"
-                        aria-label="Edit note"
-                      >
-                        ✏️ Edit
-                      </button>
+                      <button onClick={() => handleEdit(n)} className="text-blue-500 hover:text-blue-600 transition-colors duration-200">✏️ Edit</button>
                     </footer>
-                    <div className="absolute inset-0 bg-gradient-to-t from-blue-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                   </article>
                 ))}
               </div>
             ) : (
               <div className="max-h-[60vh] overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent pr-2">
                 {notes.map((n) => (
-                  <article
-                    key={n._id}
-                    className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 w-full"
-                  >
+                  <article key={n._id} className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 w-full">
                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <button
-                        onClick={() => deleteNote(n._id)}
-                        className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200"
-                        aria-label="Delete note"
-                      >
-                        <span className="sr-only">Delete</span>
-                        ✕
-                      </button>
+                      <button onClick={() => deleteNote(n._id)} className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200" aria-label="Delete note">✕</button>
                     </div>
-                    <h3 className="font-bold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-300">
-                      {n.title}
-                    </h3>
-                    <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">
-                      {n.body || "No body text"}
-                    </p>
+                    <h3 className="font-bold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-300">{n.title}</h3>
+                    <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">{n.body || "No body text"}</p>
                     <footer className="flex justify-between items-center text-xs text-gray-500 font-medium pt-2 border-t border-gray-100">
                       <time dateTime={n.createdAt}>
                         {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </time>
-                      <button
-                        onClick={() => handleEdit(n)}
-                        className="text-blue-500 hover:text-blue-600 transition-colors duration-200"
-                        aria-label="Edit note"
-                      >
-                        ✏️ Edit
-                      </button>
+                      <button onClick={() => handleEdit(n)} className="text-blue-500 hover:text-blue-600 transition-colors duration-200">✏️ Edit</button>
                     </footer>
-                    <div className="absolute inset-0 bg-gradient-to-t from-blue-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                   </article>
                 ))}
               </div>
@@ -333,18 +332,8 @@ const updateNote = async (id: string, payload: { title: string; body: string }) 
             </div>
             <p className="text-gray-600 mb-6">Are you sure you want to delete "{noteToDelete.title}"? This action cannot be undone.</p>
             <div className="flex gap-3 justify-end">
-              <button
-                onClick={closeDeleteModal}
-                className="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-colors duration-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDeleteNote}
-                className="px-4 py-2 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors duration-200"
-              >
-                Delete
-              </button>
+              <button onClick={closeDeleteModal} className="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-colors duration-200">Cancel</button>
+              <button onClick={confirmDeleteNote} className="px-4 py-2 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors duration-200">Delete</button>
             </div>
           </div>
         </div>
@@ -356,47 +345,18 @@ const updateNote = async (id: string, payload: { title: string; body: string }) 
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-900">Edit Note</h3>
-              <button
-                onClick={closeEditModal}
-                className="p-1 text-gray-500 hover:text-gray-700 transition-colors duration-200"
-              >
-                ×
-              </button>
+              <button onClick={closeEditModal} className="p-1 text-gray-500 hover:text-gray-700 transition-colors duration-200">×</button>
             </div>
-            <form onSubmit={updateNote} className="space-y-4">
+            <form onSubmit={handleUpdateNote} className="space-y-4">
               <div>
-                <input
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  placeholder="Edit title..."
-                  className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  aria-label="Edit note title"
-                />
+                <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Edit title..." className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" aria-label="Edit note title" />
               </div>
               <div>
-                <textarea
-                  value={body}
-                  onChange={e => setBody(e.target.value)}
-                  placeholder="Edit body..."
-                  rows={4}
-                  className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                  aria-label="Edit note body"
-                />
+                <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Edit body..." rows={4} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none" aria-label="Edit note body" />
               </div>
               <div className="flex gap-3 justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={closeEditModal}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-colors duration-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-500 text-white font-medium rounded-xl hover:bg-blue-600 transition-colors duration-200"
-                >
-                  Update
-                </button>
+                <button type="button" onClick={closeEditModal} className="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-colors duration-200">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-blue-500 text-white font-medium rounded-xl hover:bg-blue-600 transition-colors duration-200">Update</button>
               </div>
             </form>
           </div>
