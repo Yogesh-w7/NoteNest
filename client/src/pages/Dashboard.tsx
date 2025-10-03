@@ -38,74 +38,68 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
   const nav = useNavigate();
 
-  const fetchUser = useCallback(async () => {
-    try {
-      const res = await api.get<ApiResponse<User>>("/auth/me");
-      if (!res.data.user) {
-        nav("/login");
-        return;
-      }
-      setUser(res.data.user);
-    } catch (err) {
-      setError("Failed to fetch user data");
+const fetchUser = useCallback(async () => {
+  try {
+    const res = await api.get<{ user: User }>("/auth/me");
+    if (!res.user) {
       nav("/login");
+      return;
     }
-  }, [nav]);
+    setUser(res.user);
+  } catch (err) {
+    setError("Failed to fetch user data");
+    nav("/login");
+  }
+}, [nav]);
 
-  const fetchNotes = useCallback(async () => {
-    if (!user) return;
-    try {
-      const res = await api.get<ApiResponse<Note[]>>("/notes");
-      setNotes(res.data.notes || []);
-    } catch (err) {
-      setError("Failed to fetch notes");
-    }
-  }, [user]);
+const fetchNotes = useCallback(async () => {
+  if (!user) return;
+  try {
+    const res = await api.get<{ notes: Note[] }>("/notes");
+    setNotes(res.notes || []);
+  } catch (err) {
+    setError("Failed to fetch notes");
+  }
+}, [user]);
 
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await fetchUser();
-      setLoading(false);
-    };
-    init();
-  }, [fetchUser]);
+const createNote = useCallback(async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!title.trim()) return;
+  try {
+    setError(null);
+    const res = await api.post<{ note: Note }>("/notes", {
+      title: title.trim(),
+      body: body.trim(),
+    });
+    setNotes((prev) => [res.note, ...prev]);
+    setTitle("");
+    setBody("");
+  } catch (err) {
+    setError("Failed to create note");
+  }
+}, [title, body]);
 
-  useEffect(() => {
-    if (user) {
-      fetchNotes();
-    }
-  }, [user, fetchNotes]);
+const updateNote = useCallback(async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!editingNote || !title.trim()) return;
+  try {
+    setError(null);
+    const res = await api.put<{ note: Note }>(
+      `/notes/${editingNote._id}`,
+      { title: title.trim(), body: body.trim() }
+    );
+    setNotes((prev) =>
+      prev.map((n) => (n._id === editingNote._id ? res.note : n))
+    );
+    setTitle("");
+    setBody("");
+    setEditingNote(null);
+    setShowEditModal(false);
+  } catch (err) {
+    setError("Failed to update note");
+  }
+}, [title, body, editingNote]);
 
-  const createNote = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    try {
-      setError(null);
-      const res = await api.post<ApiResponse<Note>>("/notes", { title: title.trim(), body: body.trim() });
-      setNotes(prev => [res.data.note, ...prev]);
-      setTitle("");
-      setBody("");
-    } catch (err) {
-      setError("Failed to create note");
-    }
-  }, [title, body]);
-
-  const updateNote = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingNote || !title.trim()) return;
-    try {
-      setError(null);
-      const res = await api.put<ApiResponse<Note>>(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
-      setNotes(prev => prev.map(n => n._id === editingNote._id ? res.data.note : n));
-      setTitle("");
-      setBody("");
-      setEditingNote(null);
-      setShowEditModal(false);
-    } catch (err) {
-      setError("Failed to update note");
-    }
-  }, [title, body, editingNote]);
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
