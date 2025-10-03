@@ -3,18 +3,35 @@ import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
 import '../index.css';
 
-interface User {
+// src/types.ts
+export interface User {
   _id: string;
   name: string;
   email: string;
 }
 
-interface Note {
+export interface Note {
   _id: string;
   title: string;
   body?: string;
   createdAt: string;
   userId: string;
+}
+
+// Endpoint responses
+export interface UserResponse {
+  user: User;
+  message?: string;
+}
+
+export interface NotesResponse {
+  notes: Note[];
+  message?: string;
+}
+
+export interface NoteResponse {
+  note: Note;
+  message?: string;
 }
 
 export interface ApiResponse<T> {
@@ -40,38 +57,30 @@ export default function Dashboard() {
   const nav = useNavigate();
 
   
+// Fetch user
 const fetchUser = async () => {
-  const res = await api.get<ApiResponse<User>>("/me");
-  return res.data.user; // ✅ TypeScript now knows 'user' exists
+  const res = await api.get<UserResponse>("/me");
+  return res.data.user; // ✅ TS knows 'user' exists
 };
 
 // Fetch notes
 const fetchNotes = async () => {
-  const res = await api.get<ApiResponse<Note[]>>("/notes");
-  return res.data.notes; // ✅ TypeScript now knows 'notes' exists
+  const res = await api.get<NotesResponse>("/notes");
+  return res.data.notes; // ✅ TS knows 'notes' exists
 };
 
- const createNote = async (payload: { title: string; content: string }) => {
-  const res = await api.post<ApiResponse<Note>>("/notes", payload);
-  return res.data.note; // ✅ 'note' now exists
+// Create note
+const createNote = async (payload: { title: string; content: string }) => {
+  const res = await api.post<NoteResponse>("/notes", payload);
+  return res.data.note; // ✅ TS knows 'note' exists
 };
 
+// Update note
+const updateNote = async (id: string, payload: { title: string; body: string }) => {
+  const res = await api.put<NoteResponse>(`/notes/${id}`, payload);
+  return res.data.note;
+};
 
-  const updateNote = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingNote || !title.trim()) return;
-    try {
-      setError(null);
-      const res = await api.put<ApiResponse<Note>>(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
-      setNotes(prev => prev.map(n => n._id === editingNote._id ? res.data.note : n));
-      setTitle("");
-      setBody("");
-      setEditingNote(null);
-      setShowEditModal(false);
-    } catch (err) {
-      setError("Failed to update note");
-    }
-  }, [title, body, editingNote]);
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
