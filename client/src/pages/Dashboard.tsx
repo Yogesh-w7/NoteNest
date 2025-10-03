@@ -3,13 +3,14 @@ import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
 import '../index.css';
 
-interface User {
+// src/types.ts
+export interface User {
   _id: string;
   name: string;
   email: string;
 }
 
-interface Note {
+export interface Note {
   _id: string;
   title: string;
   body?: string;
@@ -18,18 +19,21 @@ interface Note {
 }
 
 // Explicit endpoint responses
-interface UserResponse {
+export interface UserResponse {
   user: User;
   message?: string;
 }
-interface NotesResponse {
+
+export interface NotesResponse {
   notes: Note[];
   message?: string;
 }
-interface NoteResponse {
+
+export interface NoteResponse {
   note: Note;
   message?: string;
 }
+
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
@@ -46,6 +50,30 @@ export default function Dashboard() {
   const nav = useNavigate();
 
   // --- API helpers (typed) ---
+ 3) src/pages/Dashboard.tsx
+// src/pages/Dashboard.tsx
+import React, { useEffect, useState, useCallback } from "react";
+import api from "../api/axios";
+import { useNavigate } from "react-router-dom";
+import "../index.css";
+
+import { User, Note, UserResponse, NotesResponse, NoteResponse } from "../types";
+
+export default function Dashboard() {
+  const [user, setUser] = useState<User | null>(null);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
+  const [editingNote, setEditingNote] = useState<Note | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [viewMode, setViewMode] = useState<"horizontal" | "vertical">("horizontal");
+  const nav = useNavigate();
+
+  // --- Typed API helpers ---
   const fetchUserApi = async (): Promise<User> => {
     const res = await api.get<UserResponse>("/me");
     return res.data.user;
@@ -66,7 +94,7 @@ export default function Dashboard() {
     return res.data.note;
   };
 
-  // --- Fetch on mount ---
+  // --- Fetch data on mount ---
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -83,46 +111,52 @@ export default function Dashboard() {
         setLoading(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // --- Create note (form submit handler) ---
-  const handleCreateNote = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    try {
-      setError(null);
-      const newNote = await createNoteApi({ title: title.trim(), body: body.trim() || undefined });
-      // prepend the new note
-      setNotes(prev => [newNote, ...prev]);
-      setTitle("");
-      setBody("");
-    } catch (err) {
-      setError("Failed to create note");
-    }
-  }, [title, body]);
+  // --- Create note handler ---
+  const handleCreateNote = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!title.trim()) return;
+      try {
+        setError(null);
+        const newNote = await createNoteApi({ title: title.trim(), body: body.trim() || undefined });
+        setNotes((prev) => [newNote, ...prev]);
+        setTitle("");
+        setBody("");
+      } catch (err) {
+        setError("Failed to create note");
+      }
+    },
+    [title, body]
+  );
 
-  // --- Update note (form submit handler inside edit modal) ---
-  const handleUpdateNote = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingNote) return;
-    if (!title.trim()) {
-      setError("Title required");
-      return;
-    }
-    try {
-      setError(null);
-      const updated = await updateNoteApi(editingNote._id, { title: title.trim(), body: body.trim() || undefined });
-      setNotes(prev => prev.map(n => (n._id === updated._id ? updated : n)));
-      // close edit modal
-      setEditingNote(null);
-      setShowEditModal(false);
-      setTitle("");
-      setBody("");
-    } catch (err) {
-      setError("Failed to update note");
-    }
-  }, [editingNote, title, body]);
+  // --- Update note handler (edit modal submit) ---
+  const handleUpdateNote = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editingNote) return;
+      if (!title.trim()) {
+        setError("Title required");
+        return;
+      }
+      try {
+        setError(null);
+        const updated = await updateNoteApi(editingNote._id, { title: title.trim(), body: body.trim() || undefined });
+        setNotes((prev) => prev.map((n) => (n._id === updated._id ? updated : n)));
+        setEditingNote(null);
+        setShowEditModal(false);
+        setTitle("");
+        setBody("");
+      } catch (err) {
+        setError("Failed to update note");
+      }
+    },
+    [editingNote, title, body]
+  );
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
@@ -148,28 +182,37 @@ export default function Dashboard() {
     setNoteToDelete(null);
   }, []);
 
-  const confirmDeleteNote = useCallback(async () => {
-    if (!noteToDelete) return;
-    try {
-      setError(null);
-      await api.delete(`/notes/${noteToDelete._id}`);
-      setNotes(prev => prev.filter(n => n._id !== noteToDelete._id));
-      closeDeleteModal();
-    } catch (err) {
-      setError("Failed to delete note");
-    }
-  }, [noteToDelete, closeDeleteModal]);
+  const confirmDeleteNote = useCallback(
+    async () => {
+      if (!noteToDelete) return;
+      try {
+        setError(null);
+        await api.delete(`/notes/${noteToDelete._1?._id ? noteToDelete._1._id : noteToDelete._id}`);
+        // (Above fallback is defensive; primary is noteToDelete._id)
+        setNotes((prev) => prev.filter((n) => n._id !== noteToDelete._id));
+        closeDeleteModal();
+      } catch (err) {
+        setError("Failed to delete note");
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [noteToDelete, closeDeleteModal]
+  );
 
-  const deleteNote = useCallback((id: string) => {
-    const note = notes.find(n => n._id === id);
-    if (note) openDeleteModal(note);
-  }, [notes, openDeleteModal]);
+  // simpler delete opener for list items
+  const deleteNote = useCallback(
+    (id: string) => {
+      const note = notes.find((n) => n._id === id);
+      if (note) openDeleteModal(note);
+    },
+    [notes, openDeleteModal]
+  );
 
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
     } catch {
-      // ignore
+      // ignore logout errors
     } finally {
       nav("/login");
     }
@@ -230,7 +273,7 @@ export default function Dashboard() {
               <div>
                 <input
                   value={title}
-                  onChange={e => setTitle(e.target.value)}
+                  onChange={(e) => setTitle(e.target.value)}
                   placeholder="Enter a catchy title..."
                   className="w-full p-4 border-0 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-200/50 text-lg font-medium placeholder-gray-500 transition-all duration-300 shadow-sm hover:shadow-md"
                   aria-label="Note title"
@@ -239,7 +282,7 @@ export default function Dashboard() {
               <div>
                 <textarea
                   value={body}
-                  onChange={e => setBody(e.target.value)}
+                  onChange={(e) => setBody(e.target.value)}
                   placeholder="What's on your mind? Share your thoughts..."
                   rows={3}
                   className="w-full p-4 border-0 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-purple-200/50 text-base placeholder-gray-500 transition-all duration-300 resize-none shadow-sm hover:shadow-md"
@@ -252,9 +295,7 @@ export default function Dashboard() {
                 className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed hover:from-green-600 hover:to-emerald-700 transition-all duration-300 transform hover:-translate-y-1 active:translate-y-0 disabled:transform-none"
                 aria-label="Create new note"
               >
-                <span className="flex items-center justify-center gap-2">
-                  ✨ Create Note
-                </span>
+                <span className="flex items-center justify-center gap-2">✨ Create Note</span>
               </button>
             </div>
           </form>
@@ -267,10 +308,10 @@ export default function Dashboard() {
                 Your Notes ({notes.length})
               </h2>
               <button
-                onClick={() => setViewMode(viewMode === 'horizontal' ? 'vertical' : 'horizontal')}
+                onClick={() => setViewMode(viewMode === "horizontal" ? "vertical" : "horizontal")}
                 className="px-4 py-2 bg-indigo-500 text-white font-medium rounded-xl hover:bg-indigo-600 transition-colors duration-200"
               >
-                {viewMode === 'horizontal' ? 'Show All Notes' : 'Horizontal View'}
+                {viewMode === "horizontal" ? "Show All Notes" : "Horizontal View"}
               </button>
             </div>
 
@@ -281,20 +322,34 @@ export default function Dashboard() {
                   <p className="text-sm">Start by creating your first note above.</p>
                 </div>
               </div>
-            ) : viewMode === 'horizontal' ? (
+            ) : viewMode === "horizontal" ? (
               <div className="flex overflow-x-auto space-x-4 pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
                 {notes.map((n) => (
-                  <article key={n._id} className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 min-w-[300px] flex-shrink-0">
+                  <article
+                    key={n._id}
+                    className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 min-w-[300px] flex-shrink-0"
+                  >
                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <button onClick={() => deleteNote(n._id)} className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200" aria-label="Delete note">✕</button>
+                      <button
+                        onClick={() => deleteNote(n._id)}
+                        className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200"
+                        aria-label="Delete note"
+                      >
+                        <span className="sr-only">Delete</span>✕
+                      </button>
                     </div>
-                    <h3 className="font-bold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-300">{n.title}</h3>
+                    <h3 className="font-bold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-300">
+                      {n.title}
+                    </h3>
                     <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">{n.body || "No body text"}</p>
                     <footer className="flex justify-between items-center text-xs text-gray-500 font-medium pt-2 border-t border-gray-100">
                       <time dateTime={n.createdAt}>
-                        {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(n.createdAt).toLocaleDateString()}{" "}
+                        {new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </time>
-                      <button onClick={() => handleEdit(n)} className="text-blue-500 hover:text-blue-600 transition-colors duration-200">✏️ Edit</button>
+                      <button onClick={() => handleEdit(n)} className="text-blue-500 hover:text-blue-600 transition-colors duration-200">
+                        ✏️ Edit
+                      </button>
                     </footer>
                   </article>
                 ))}
@@ -302,15 +357,21 @@ export default function Dashboard() {
             ) : (
               <div className="max-h-[60vh] overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent pr-2">
                 {notes.map((n) => (
-                  <article key={n._id} className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 w-full">
+                  <article
+                    key={n._1?._id ? n._1._id : n._id}
+                    className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 w-full"
+                  >
                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <button onClick={() => deleteNote(n._id)} className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200" aria-label="Delete note">✕</button>
+                      <button onClick={() => deleteNote(n._id)} className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200" aria-label="Delete note">
+                        <span className="sr-only">Delete</span>✕
+                      </button>
                     </div>
                     <h3 className="font-bold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-300">{n.title}</h3>
                     <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">{n.body || "No body text"}</p>
                     <footer className="flex justify-between items-center text-xs text-gray-500 font-medium pt-2 border-t border-gray-100">
                       <time dateTime={n.createdAt}>
-                        {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(n.createdAt).toLocaleDateString()}{" "}
+                        {new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </time>
                       <button onClick={() => handleEdit(n)} className="text-blue-500 hover:text-blue-600 transition-colors duration-200">✏️ Edit</button>
                     </footer>
@@ -322,7 +383,7 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       {showDeleteModal && noteToDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
@@ -349,10 +410,10 @@ export default function Dashboard() {
             </div>
             <form onSubmit={handleUpdateNote} className="space-y-4">
               <div>
-                <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Edit title..." className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" aria-label="Edit note title" />
+                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Edit title..." className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" aria-label="Edit note title" />
               </div>
               <div>
-                <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Edit body..." rows={4} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none" aria-label="Edit note body" />
+                <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Edit body..." rows={4} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none" aria-label="Edit note body" />
               </div>
               <div className="flex gap-3 justify-end pt-2">
                 <button type="button" onClick={closeEditModal} className="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-colors duration-200">Cancel</button>
@@ -365,3 +426,4 @@ export default function Dashboard() {
     </>
   );
 }
+
