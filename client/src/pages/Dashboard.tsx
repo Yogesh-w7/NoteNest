@@ -41,11 +41,11 @@ export default function Dashboard() {
 const fetchUser = useCallback(async () => {
   try {
     const res = await api.get<{ user: User }>("/auth/me");
-    if (!res.user) {
+    if (!res.data.user) {
       nav("/login");
       return;
     }
-    setUser(res.user);
+    setUser(res.data.user);
   } catch (err) {
     setError("Failed to fetch user data");
     nav("/login");
@@ -56,9 +56,11 @@ const fetchNotes = useCallback(async () => {
   if (!user) return;
   try {
     const res = await api.get<{ notes: Note[] }>("/notes");
-    setNotes(res.notes || []);
+    setNotes(res.data.notes || []);
   } catch (err) {
     setError("Failed to fetch notes");
+  } finally {
+    setLoading(false);
   }
 }, [user]);
 
@@ -71,7 +73,7 @@ const createNote = useCallback(async (e: React.FormEvent) => {
       title: title.trim(),
       body: body.trim(),
     });
-    setNotes((prev) => [res.note, ...prev]);
+    setNotes((prev) => [res.data.note, ...prev]);
     setTitle("");
     setBody("");
   } catch (err) {
@@ -89,7 +91,7 @@ const updateNote = useCallback(async (e: React.FormEvent) => {
       { title: title.trim(), body: body.trim() }
     );
     setNotes((prev) =>
-      prev.map((n) => (n._id === editingNote._id ? res.note : n))
+      prev.map((n) => (n._id === editingNote._id ? res.data.note : n))
     );
     setTitle("");
     setBody("");
@@ -100,6 +102,15 @@ const updateNote = useCallback(async (e: React.FormEvent) => {
   }
 }, [title, body, editingNote]);
 
+useEffect(() => {
+  fetchUser();
+}, [fetchUser]);
+
+useEffect(() => {
+  if (user) {
+    fetchNotes();
+  }
+}, [user, fetchNotes]);
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
