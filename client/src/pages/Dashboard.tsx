@@ -40,12 +40,12 @@ export default function Dashboard() {
 
 const fetchUser = useCallback(async () => {
   try {
-    const res = await api.get<{ user: User }>("/auth/me");
-    if (!res.data.user) {
+    const res = await api.get<ApiResponse<User>>("/auth/me");
+    if (!res.data.data) {
       nav("/login");
       return;
     }
-    setUser(res.data.user);
+    setUser(res.data.data);  // ✅ use data.data
   } catch (err) {
     setError("Failed to fetch user data");
     nav("/login");
@@ -54,11 +54,12 @@ const fetchUser = useCallback(async () => {
   }
 }, [nav]);
 
+
 const fetchNotes = useCallback(async () => {
   if (!user) return;
   try {
-    const res = await api.get<{ notes: Note[] }>("/notes");
-    setNotes(res.data.notes || []);
+    const res = await api.get<ApiResponse<Note[]>>("/notes");
+    setNotes(res.data.data || []);  // ✅ use data.data
   } catch (err) {
     setError("Failed to fetch notes");
   } finally {
@@ -66,16 +67,17 @@ const fetchNotes = useCallback(async () => {
   }
 }, [user]);
 
+
 const createNote = useCallback(async (e: React.FormEvent) => {
   e.preventDefault();
   if (!title.trim()) return;
   try {
     setError(null);
-    const res = await api.post<{ note: Note }>("/notes", {
+    const res = await api.post<ApiResponse<Note>>("/notes", {
       title: title.trim(),
       body: body.trim(),
     });
-    setNotes((prev) => [res.data.note, ...prev]);
+    setNotes(prev => [res.data.data, ...prev]);  // ✅ use data.data
     setTitle("");
     setBody("");
   } catch (err) {
@@ -88,12 +90,12 @@ const updateNote = useCallback(async (e: React.FormEvent) => {
   if (!editingNote || !title.trim()) return;
   try {
     setError(null);
-    const res = await api.put<{ note: Note }>(
+    const res = await api.put<ApiResponse<Note>>(
       `/notes/${editingNote._id}`,
       { title: title.trim(), body: body.trim() }
     );
-    setNotes((prev) =>
-      prev.map((n) => (n._id === editingNote._id ? res.data.note : n))
+    setNotes(prev =>
+      prev.map(n => n._id === editingNote._id ? res.data.data : n)  // ✅ use data.data
     );
     setTitle("");
     setBody("");
@@ -103,7 +105,6 @@ const updateNote = useCallback(async (e: React.FormEvent) => {
     setError("Failed to update note");
   }
 }, [title, body, editingNote]);
-
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
