@@ -1,8 +1,7 @@
-// src/pages/Dashboard.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
-import "../index.css";
+import '../index.css';
 
 interface User {
   _id: string;
@@ -18,28 +17,12 @@ interface Note {
   userId: string;
 }
 
-/** Safe payload extractor (handles res.data.data, res.data.user/note/notes, or raw payload) */
-function extractPayload<T>(response: any): T | null {
-  if (!response) return null;
-  // AxiosResponse: actual payload often sits under response.data
-  const d = response.data ?? response;
-
-  if (!d) return null;
-
-  // Preferred nested shape: { data: <payload> }
-  if (d.data !== undefined) return d.data as T;
-
-  // Legacy shapes: { user: <payload> } | { note: <payload> } | { notes: <payload[]> }
-  if ((d as any).user !== undefined) return (d as any).user as T;
-  if ((d as any).note !== undefined) return (d as any).note as T;
-  if ((d as any).notes !== undefined) return (d as any).notes as unknown as T;
-
-  // Otherwise, assume d itself is the payload
-  return d as T;
+interface ApiResponse<T> {
+  data: { [key: string]: T };
+  status: number;
 }
 
 export default function Dashboard() {
-  const nav = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [title, setTitle] = useState("");
@@ -50,80 +33,82 @@ export default function Dashboard() {
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [viewMode, setViewMode] = useState<"horizontal" | "vertical">("horizontal");
+  const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
+  const nav = useNavigate();
 
   const fetchUser = useCallback(async () => {
     try {
-      const res = await api.get("/auth/me");
-      const userData = extractPayload<User>(res);
-      if (!userData) {
+      const res = await api.get<ApiResponse<User>>("/auth/me");
+      if (!res.data.user) {
         nav("/login");
         return;
       }
-      setUser(userData);
+      setUser(res.data.user);
     } catch (err) {
       setError("Failed to fetch user data");
       nav("/login");
-    } finally {
-      setLoading(false);
     }
   }, [nav]);
 
   const fetchNotes = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await api.get("/notes");
-      const payload = extractPayload<Note[] | Note>(res);
-      if (!payload) setNotes([]);
-      else if (Array.isArray(payload)) setNotes(payload);
-      else setNotes([payload]);
+      const res = await api.get<ApiResponse<Note[]>>("/notes");
+      setNotes(res.data.notes || []);
     } catch (err) {
       setError("Failed to fetch notes");
     }
   }, [user]);
 
-  const createNote = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!title.trim()) return;
-      try {
-        setError(null);
-        const res = await api.post("/notes", { title: title.trim(), body: body.trim() });
-        const newNote = extractPayload<Note>(res);
-        if (newNote) setNotes((p) => [newNote, ...p]);
-        setTitle("");
-        setBody("");
-      } catch {
-        setError("Failed to create note");
-      }
-    },
-    [title, body]
-  );
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      await fetchUser();
+      setLoading(false);
+    };
+    init();
+  }, [fetchUser]);
 
-  const updateNote = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!editingNote || !title.trim()) return;
-      try {
-        setError(null);
-        const res = await api.put(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
-        const updated = extractPayload<Note>(res);
-        if (updated) setNotes((p) => p.map((n) => (n._id === editingNote._id ? updated : n)));
-        setTitle("");
-        setBody("");
-        setEditingNote(null);
-        setShowEditModal(false);
-      } catch {
-        setError("Failed to update note");
-      }
-    },
-    [title, body, editingNote]
-  );
+  useEffect(() => {
+    if (user) {
+      fetchNotes();
+    }
+  }, [user, fetchNotes]);
+
+  const createNote = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    try {
+      setError(null);
+      const res = await api.post<ApiResponse<Note>>("/notes", { title: title.trim(), body: body.trim() });
+      setNotes(prev => [res.data.note, ...prev]);
+      setTitle("");
+      setBody("");
+    } catch (err) {
+      setError("Failed to create note");
+    }
+  }, [title, body]);
+
+  const updateNote = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNote || !title.trim()) return;
+    try {
+      setError(null);
+      const res = await api.put<ApiResponse<Note>>(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
+      setNotes(prev => prev.map(n => n._id === editingNote._id ? res.data.note : n));
+      setTitle("");
+      setBody("");
+      setEditingNote(null);
+      setShowEditModal(false);
+    } catch (err) {
+      setError("Failed to update note");
+    }
+  }, [title, body, editingNote]);
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
     setTitle(note.title);
-    setBody(note.body ?? "");
+    setBody(note.body || "");
     setShowEditModal(true);
   }, []);
 
@@ -149,116 +134,210 @@ export default function Dashboard() {
     try {
       setError(null);
       await api.delete(`/notes/${noteToDelete._id}`);
-      setNotes((p) => p.filter((n) => n._id !== noteToDelete._id));
+      setNotes(prev => prev.filter(n => n._id !== noteToDelete._id));
       closeDeleteModal();
-    } catch {
+    } catch (err) {
       setError("Failed to delete note");
     }
   }, [noteToDelete, closeDeleteModal]);
 
-  const deleteNote = useCallback(
-    (id: string) => {
-      const n = notes.find((x) => x._id === id);
-      if (n) openDeleteModal(n);
-    },
-    [notes, openDeleteModal]
-  );
+  const deleteNote = useCallback((id: string) => {
+    const note = notes.find(n => n._id === id);
+    if (note) {
+      openDeleteModal(note);
+    }
+  }, [notes, openDeleteModal]);
 
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
-    } catch {
-      // ignore
+    } catch (err) {
+      // Ignore logout errors
     } finally {
       nav("/login");
     }
   }, [nav]);
 
-  useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
-
-  useEffect(() => {
-    if (user) fetchNotes();
-  }, [user, fetchNotes]);
-
-  if (loading)
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
+  }
 
-  if (error)
+  if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold text-red-600 mb-4">Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button onClick={() => window.location.reload()} className="px-6 py-2 bg-blue-600 text-white rounded-lg">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-300"
+          >
             Retry
           </button>
         </div>
       </div>
     );
+  }
 
   return (
     <>
       <div className="p-4 sm:p-6 min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-        <header className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-6 gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">{user ? `Welcome, ${user.name}` : "Welcome"}</h1>
-            <p className="text-sm text-gray-600">{user?.email}</p>
+        {/* Header */}
+        <header className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-6 lg:mb-8 gap-4">
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Welcome{user ? `, ${user.name}` : ""}!
+            </h1>
+            <p className="text-sm sm:text-base text-gray-600 font-medium">{user?.email}</p>
           </div>
-          <button onClick={logout} className="px-4 py-2 bg-red-500 text-white rounded">Logout</button>
+          <button
+            onClick={logout}
+            className="px-6 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:from-red-600 hover:to-red-700 transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0"
+            aria-label="Logout"
+          >
+            Logout
+          </button>
         </header>
 
-        <main className="space-y-6">
-          <form onSubmit={createNote} className="bg-white p-6 rounded shadow">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full p-3 mb-3 border rounded" />
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder="Body" className="w-full p-3 mb-3 border rounded" />
-            <button type="submit" disabled={!title.trim()} className="px-4 py-2 bg-green-600 text-white rounded">
-              Create
-            </button>
-          </form>
-
-          <section>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Your Notes ({notes.length})</h2>
-              <button onClick={() => setViewMode((v) => (v === "horizontal" ? "vertical" : "horizontal"))} className="px-3 py-1 bg-indigo-500 text-white rounded">
-                {viewMode === "horizontal" ? "Show All Notes" : "Horizontal View"}
+        {/* Create Note Form */}
+        <main className="space-y-6 lg:space-y-8">
+          <form
+            onSubmit={createNote}
+            className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20"
+          >
+            <div className="space-y-4">
+              <div>
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  placeholder="Enter a catchy title..."
+                  className="w-full p-4 border-0 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-200/50 text-lg font-medium placeholder-gray-500 transition-all duration-300 shadow-sm hover:shadow-md"
+                  aria-label="Note title"
+                />
+              </div>
+              <div>
+                <textarea
+                  value={body}
+                  onChange={e => setBody(e.target.value)}
+                  placeholder="What's on your mind? Share your thoughts..."
+                  rows={3}
+                  className="w-full p-4 border-0 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-purple-200/50 text-base placeholder-gray-500 transition-all duration-300 resize-none shadow-sm hover:shadow-md"
+                  aria-label="Note body"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={!title.trim()}
+                className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed hover:from-green-600 hover:to-emerald-700 transition-all duration-300 transform hover:-translate-y-1 active:translate-y-0 disabled:transform-none"
+                aria-label="Create new note"
+              >
+                <span className="flex items-center justify-center gap-2">
+                  ✨ Create Note
+                </span>
               </button>
             </div>
+          </form>
 
+          {/* Notes Section */}
+          <section className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <span className="text-blue-600">📝</span>
+                Your Notes ({notes.length})
+              </h2>
+              <button
+                onClick={() => setViewMode(viewMode === 'horizontal' ? 'vertical' : 'horizontal')}
+                className="px-4 py-2 bg-indigo-500 text-white font-medium rounded-xl hover:bg-indigo-600 transition-colors duration-200"
+              >
+                {viewMode === 'horizontal' ? 'Show All Notes' : 'Horizontal View'}
+              </button>
+            </div>
             {notes.length === 0 ? (
-              <div className="p-6 bg-white rounded border-dashed border">No notes yet</div>
-            ) : viewMode === "horizontal" ? (
-              <div className="flex overflow-x-auto space-x-4 pb-4">
+              <div className="text-center py-12 bg-white/60 backdrop-blur-sm rounded-2xl border border-dashed border-gray-300">
+                <div className="text-gray-500 space-y-2">
+                  <p className="text-lg">No notes yet!</p>
+                  <p className="text-sm">Start by creating your first note above.</p>
+                </div>
+              </div>
+            ) : viewMode === 'horizontal' ? (
+              <div className="flex overflow-x-auto space-x-4 pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
                 {notes.map((n) => (
-                  <article key={n._id} className="bg-white p-5 rounded shadow min-w-[280px] relative">
-                    <button onClick={() => deleteNote(n._1 ?? n._id)} className="absolute top-2 right-2">✕</button>
-                    <h3 className="font-bold">{n.title}</h3>
-                    <p className="text-gray-600">{n.body}</p>
-                    <div className="text-xs text-gray-400 mt-2">{new Date(n.createdAt).toLocaleString()}</div>
-                    <button onClick={() => handleEdit(n)} className="text-blue-500 mt-2">Edit</button>
+                  <article
+                    key={n._id}
+                    className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 min-w-[300px] flex-shrink-0"
+                  >
+                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <button
+                        onClick={() => deleteNote(n._id)}
+                        className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200"
+                        aria-label="Delete note"
+                      >
+                        <span className="sr-only">Delete</span>
+                        ✕
+                      </button>
+                    </div>
+                    <h3 className="font-bold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-300">
+                      {n.title}
+                    </h3>
+                    <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">
+                      {n.body || "No body text"}
+                    </p>
+                    <footer className="flex justify-between items-center text-xs text-gray-500 font-medium pt-2 border-t border-gray-100">
+                      <time dateTime={n.createdAt}>
+                        {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </time>
+                      <button
+                        onClick={() => handleEdit(n)}
+                        className="text-blue-500 hover:text-blue-600 transition-colors duration-200"
+                        aria-label="Edit note"
+                      >
+                        ✏️ Edit
+                      </button>
+                    </footer>
+                    <div className="absolute inset-0 bg-gradient-to-t from-blue-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                   </article>
                 ))}
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="max-h-[60vh] overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent pr-2">
                 {notes.map((n) => (
-                  <article key={n._id} className="bg-white p-5 rounded shadow">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-bold">{n.title}</h3>
-                        <p className="text-gray-600">{n.body}</p>
-                        <div className="text-xs text-gray-400 mt-2">{new Date(n.createdAt).toLocaleString()}</div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <button onClick={() => handleEdit(n)} className="text-blue-500">Edit</button>
-                        <button onClick={() => deleteNote(n._id)} className="text-red-500">Delete</button>
-                      </div>
+                  <article
+                    key={n._id}
+                    className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 w-full"
+                  >
+                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <button
+                        onClick={() => deleteNote(n._id)}
+                        className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors duration-200"
+                        aria-label="Delete note"
+                      >
+                        <span className="sr-only">Delete</span>
+                        ✕
+                      </button>
                     </div>
+                    <h3 className="font-bold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-300">
+                      {n.title}
+                    </h3>
+                    <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">
+                      {n.body || "No body text"}
+                    </p>
+                    <footer className="flex justify-between items-center text-xs text-gray-500 font-medium pt-2 border-t border-gray-100">
+                      <time dateTime={n.createdAt}>
+                        {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </time>
+                      <button
+                        onClick={() => handleEdit(n)}
+                        className="text-blue-500 hover:text-blue-600 transition-colors duration-200"
+                        aria-label="Edit note"
+                      >
+                        ✏️ Edit
+                      </button>
+                    </footer>
+                    <div className="absolute inset-0 bg-gradient-to-t from-blue-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                   </article>
                 ))}
               </div>
@@ -267,31 +346,80 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* Delete modal */}
+      {/* Delete Confirmation Modal */}
       {showDeleteModal && noteToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow">
-            <h3 className="font-bold mb-2">Delete Note?</h3>
-            <p className="text-sm mb-4">Delete "{noteToDelete.title}"?</p>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-red-500 text-2xl">🗑️</span>
+              <h3 className="text-lg font-bold text-gray-900">Delete Note?</h3>
+            </div>
+            <p className="text-gray-600 mb-6">Are you sure you want to delete "{noteToDelete.title}"? This action cannot be undone.</p>
             <div className="flex gap-3 justify-end">
-              <button onClick={closeDeleteModal} className="px-3 py-1 bg-gray-200 rounded">Cancel</button>
-              <button onClick={confirmDeleteNote} className="px-3 py-1 bg-red-500 text-white rounded">Delete</button>
+              <button
+                onClick={closeDeleteModal}
+                className="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-colors duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteNote}
+                className="px-4 py-2 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors duration-200"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit modal */}
+      {/* Edit Modal */}
       {showEditModal && editingNote && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow max-w-md w-full">
-            <h3 className="font-bold mb-2">Edit Note</h3>
-            <form onSubmit={updateNote} className="space-y-3">
-              <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full p-3 border rounded" />
-              <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} className="w-full p-3 border rounded" />
-              <div className="flex justify-end gap-3">
-                <button type="button" onClick={closeEditModal} className="px-3 py-1 bg-gray-200 rounded">Cancel</button>
-                <button type="submit" className="px-3 py-1 bg-blue-500 text-white rounded">Save</button>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Edit Note</h3>
+              <button
+                onClick={closeEditModal}
+                className="p-1 text-gray-500 hover:text-gray-700 transition-colors duration-200"
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={updateNote} className="space-y-4">
+              <div>
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  placeholder="Edit title..."
+                  className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  aria-label="Edit note title"
+                />
+              </div>
+              <div>
+                <textarea
+                  value={body}
+                  onChange={e => setBody(e.target.value)}
+                  placeholder="Edit body..."
+                  rows={4}
+                  className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                  aria-label="Edit note body"
+                />
+              </div>
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-300 transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-500 text-white font-medium rounded-xl hover:bg-blue-600 transition-colors duration-200"
+                >
+                  Update
+                </button>
               </div>
             </form>
           </div>
