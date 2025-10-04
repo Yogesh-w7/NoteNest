@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
-import "../index.css";
+import '../index.css';
 
 interface User {
   _id: string;
@@ -17,18 +17,9 @@ interface Note {
   userId: string;
 }
 
-// Explicit endpoint responses
-interface UserResponse {
-  user: User;
-  message?: string;
-}
-interface NotesResponse {
-  notes: Note[];
-  message?: string;
-}
-interface NoteResponse {
-  note: Note;
-  message?: string;
+interface ApiResponse<T> {
+  data: { [key: string]: T };
+  status: number;
 }
 
 export default function Dashboard() {
@@ -42,19 +33,18 @@ export default function Dashboard() {
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [viewMode, setViewMode] = useState<"horizontal" | "vertical">("horizontal");
+  const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
   const nav = useNavigate();
 
-  // --- API helpers ---
   const fetchUser = useCallback(async () => {
     try {
-      const res = await api.get<UserResponse>("/auth/me");
+      const res = await api.get<ApiResponse<User>>("/auth/me");
       if (!res.data.user) {
         nav("/login");
         return;
       }
       setUser(res.data.user);
-    } catch {
+    } catch (err) {
       setError("Failed to fetch user data");
       nav("/login");
     }
@@ -63,9 +53,9 @@ export default function Dashboard() {
   const fetchNotes = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await api.get<NotesResponse>("/notes");
+      const res = await api.get<ApiResponse<Note[]>>("/notes");
       setNotes(res.data.notes || []);
-    } catch {
+    } catch (err) {
       setError("Failed to fetch notes");
     }
   }, [user]);
@@ -85,7 +75,6 @@ export default function Dashboard() {
     }
   }, [user, fetchNotes]);
 
-  
   const createNote = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
