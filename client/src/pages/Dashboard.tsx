@@ -85,7 +85,7 @@ export default function Dashboard() {
     }
   }, [user, fetchNotes]);
 
-  const createNote = useCallback(
+  const handleCreateNote = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!title.trim()) return;
@@ -105,7 +105,8 @@ export default function Dashboard() {
     [title, body]
   );
 
-  const updateNote = useCallback(
+  // --- Update note ---
+  const handleUpdateNote = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!editingNote || !title.trim()) return;
