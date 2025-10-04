@@ -10,16 +10,29 @@ import authRoutes from "./routes/auth";
 import notesRoutes from "./routes/notes";
 
 const app = express();
+
+// --- Body parsing and cookies ---
 app.use(express.json());
 app.use(cookieParser());
+
+// --- CORS ---
 app.use(cors({
-  origin: CLIENT_URL,
+  origin: CLIENT_URL,   // Your frontend URL
   credentials: true
 }));
 
+// --- COOP / COEP headers to fix postMessage / Google login ---
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+  next();
+});
+
+// --- Routes ---
 app.use("/api/auth", authRoutes);
 app.use("/api/notes", notesRoutes);
 
+// --- MongoDB connection & server start ---
 mongoose.connect(MONGO_URI)
   .then(() => {
     console.log("Mongo connected");
