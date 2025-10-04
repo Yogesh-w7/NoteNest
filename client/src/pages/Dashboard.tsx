@@ -85,7 +85,6 @@ export default function Dashboard() {
     }
   }, [user, fetchNotes]);
 
-  // --- Create note ---
   const handleCreateNote = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -327,7 +326,7 @@ export default function Dashboard() {
               <div className="max-h-[60vh] overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent pr-2">
                 {notes.map((n) => (
                   <article
-                    key={n._1?._id ? n._1._id : n._id}
+                    key={n._id}
                     className="group bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/20 overflow-hidden relative hover:-translate-y-2 active:translate-y-0 w-full"
                   >
                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -395,4 +394,3 @@ export default function Dashboard() {
     </>
   );
 }
-
