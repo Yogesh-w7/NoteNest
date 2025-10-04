@@ -85,6 +85,7 @@ export default function Dashboard() {
     }
   }, [user, fetchNotes]);
 
+  // --- Create note ---
   const handleCreateNote = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
