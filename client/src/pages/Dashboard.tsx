@@ -17,9 +17,18 @@ interface Note {
   userId: string;
 }
 
-interface ApiResponse<T> {
-  data: { [key: string]: T };
-  status: number;
+// Explicit endpoint responses
+interface UserResponse {
+  user: User;
+  message?: string;
+}
+interface NotesResponse {
+  notes: Note[];
+  message?: string;
+}
+interface NoteResponse {
+  note: Note;
+  message?: string;
 }
 
 export default function Dashboard() {
@@ -36,15 +45,15 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
   const nav = useNavigate();
 
-  const fetchUser = useCallback(async () => {
+const fetchUser = useCallback(async () => {
     try {
-      const res = await api.get<ApiResponse<User>>("/auth/me");
+      const res = await api.get<UserResponse>("/auth/me");
       if (!res.data.user) {
         nav("/login");
         return;
       }
       setUser(res.data.user);
-    } catch (err) {
+    } catch {
       setError("Failed to fetch user data");
       nav("/login");
     }
@@ -53,9 +62,9 @@ export default function Dashboard() {
   const fetchNotes = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await api.get<ApiResponse<Note[]>>("/notes");
+      const res = await api.get<NotesResponse>("/notes");
       setNotes(res.data.notes || []);
-    } catch (err) {
+    } catch {
       setError("Failed to fetch notes");
     }
   }, [user]);
