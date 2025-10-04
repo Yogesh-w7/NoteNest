@@ -85,51 +85,35 @@ export default function Dashboard() {
     }
   }, [user, fetchNotes]);
 
-  // --- Create note ---
-  const handleCreateNote = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!title.trim()) return;
-      try {
-        setError(null);
-        const res = await api.post<NoteResponse>("/notes", {
-          title: title.trim(),
-          body: body.trim(),
-        });
-        setNotes((prev) => [res.data.note, ...prev]);
-        setTitle("");
-        setBody("");
-      } catch {
-        setError("Failed to create note");
-      }
-    },
-    [title, body]
-  );
+const createNote = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    try {
+      setError(null);
+      const res = await api.post<ApiResponse<Note>>("/notes", { title: title.trim(), body: body.trim() });
+      setNotes(prev => [res.data.note, ...prev]);
+      setTitle("");
+      setBody("");
+    } catch (err) {
+      setError("Failed to create note");
+    }
+  }, [title, body]);
 
-  // --- Update note ---
-  const handleUpdateNote = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!editingNote || !title.trim()) return;
-      try {
-        setError(null);
-        const res = await api.put<NoteResponse>(`/notes/${editingNote._id}`, {
-          title: title.trim(),
-          body: body.trim(),
-        });
-        setNotes((prev) =>
-          prev.map((n) => (n._id === editingNote._id ? res.data.note : n))
-        );
-        setTitle("");
-        setBody("");
-        setEditingNote(null);
-        setShowEditModal(false);
-      } catch {
-        setError("Failed to update note");
-      }
-    },
-    [title, body, editingNote]
-  );
+  const updateNote = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNote || !title.trim()) return;
+    try {
+      setError(null);
+      const res = await api.put<ApiResponse<Note>>(`/notes/${editingNote._id}`, { title: title.trim(), body: body.trim() });
+      setNotes(prev => prev.map(n => n._id === editingNote._id ? res.data.note : n));
+      setTitle("");
+      setBody("");
+      setEditingNote(null);
+      setShowEditModal(false);
+    } catch (err) {
+      setError("Failed to update note");
+    }
+  }, [title, body, editingNote]);
 
   const handleEdit = useCallback((note: Note) => {
     setEditingNote(note);
@@ -160,32 +144,27 @@ export default function Dashboard() {
     try {
       setError(null);
       await api.delete(`/notes/${noteToDelete._id}`);
-      setNotes((prev) => prev.filter((n) => n._id !== noteToDelete._id));
+      setNotes(prev => prev.filter(n => n._id !== noteToDelete._id));
       closeDeleteModal();
-    } catch {
+    } catch (err) {
       setError("Failed to delete note");
     }
   }, [noteToDelete, closeDeleteModal]);
 
-  const deleteNote = useCallback(
-    (id: string) => {
-      const note = notes.find((n) => n._id === id);
-      if (note) {
-        openDeleteModal(note);
-      }
-    },
-    [notes, openDeleteModal]
-  );
+  const deleteNote = useCallback((id: string) => {
+    const note = notes.find(n => n._id === id);
+    if (note) {
+      openDeleteModal(note);
+    }
+  }, [notes, openDeleteModal]);
 
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
-    } catch {
-      // ignore
+    } catch (err) {
+      // Ignore logout errors
     } finally {
       nav("/login");
-    }
-  }, [nav]);
 
   if (loading) {
     return (
