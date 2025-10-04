@@ -1,16 +1,15 @@
 import React, { useEffect, useState, useCallback } from "react";
 import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
-import '../index.css';
+import "../index.css";
 
-// src/types.ts
-export interface User {
+interface User {
   _id: string;
   name: string;
   email: string;
 }
 
-export interface Note {
+interface Note {
   _id: string;
   title: string;
   body?: string;
@@ -19,45 +18,18 @@ export interface Note {
 }
 
 // Explicit endpoint responses
-export interface UserResponse {
+interface UserResponse {
   user: User;
   message?: string;
 }
-
-export interface NotesResponse {
+interface NotesResponse {
   notes: Note[];
   message?: string;
 }
-
-export interface NoteResponse {
+interface NoteResponse {
   note: Note;
   message?: string;
 }
-
-
-export default function Dashboard() {
-  const [user, setUser] = useState<User | null>(null);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
-  const [editingNote, setEditingNote] = useState<Note | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [viewMode, setViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
-  const nav = useNavigate();
-
-  // --- API helpers (typed) ---
- 3) src/pages/Dashboard.tsx
-// src/pages/Dashboard.tsx
-import React, { useEffect, useState, useCallback } from "react";
-import api from "../api/axios";
-import { useNavigate } from "react-router-dom";
-import "../index.css";
-
-import { User, Note, UserResponse, NotesResponse, NoteResponse } from "../types";
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
@@ -73,89 +45,88 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<"horizontal" | "vertical">("horizontal");
   const nav = useNavigate();
 
-  // --- Typed API helpers ---
-  const fetchUserApi = async (): Promise<User> => {
-    const res = await api.get<UserResponse>("/me");
-    return res.data.user;
-  };
-
-  const fetchNotesApi = async (): Promise<Note[]> => {
-    const res = await api.get<NotesResponse>("/notes");
-    return res.data.notes;
-  };
-
-  const createNoteApi = async (payload: { title: string; body?: string }): Promise<Note> => {
-    const res = await api.post<NoteResponse>("/notes", payload);
-    return res.data.note;
-  };
-
-  const updateNoteApi = async (id: string, payload: { title: string; body?: string }): Promise<Note> => {
-    const res = await api.put<NoteResponse>(`/notes/${id}`, payload);
-    return res.data.note;
-  };
-
-  // --- Fetch data on mount ---
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [u, ns] = await Promise.all([fetchUserApi(), fetchNotesApi()]);
-        if (!mounted) return;
-        setUser(u);
-        setNotes(ns);
-      } catch (err) {
-        setError("Failed to load dashboard. Please try again.");
-      } finally {
-        setLoading(false);
+  // --- API helpers ---
+  const fetchUser = useCallback(async () => {
+    try {
+      const res = await api.get<UserResponse>("/auth/me");
+      if (!res.data.user) {
+        nav("/login");
+        return;
       }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+      setUser(res.data.user);
+    } catch {
+      setError("Failed to fetch user data");
+      nav("/login");
+    }
+  }, [nav]);
 
-  // --- Create note handler ---
-  const handleCreateNote = useCallback(
+  const fetchNotes = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await api.get<NotesResponse>("/notes");
+      setNotes(res.data.notes || []);
+    } catch {
+      setError("Failed to fetch notes");
+    }
+  }, [user]);
+
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      await fetchUser();
+      setLoading(false);
+    };
+    init();
+  }, [fetchUser]);
+
+  useEffect(() => {
+    if (user) {
+      fetchNotes();
+    }
+  }, [user, fetchNotes]);
+
+  const createNote = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!title.trim()) return;
       try {
         setError(null);
-        const newNote = await createNoteApi({ title: title.trim(), body: body.trim() || undefined });
-        setNotes((prev) => [newNote, ...prev]);
+        const res = await api.post<NoteResponse>("/notes", {
+          title: title.trim(),
+          body: body.trim(),
+        });
+        setNotes((prev) => [res.data.note, ...prev]);
         setTitle("");
         setBody("");
-      } catch (err) {
+      } catch {
         setError("Failed to create note");
       }
     },
     [title, body]
   );
 
-  // --- Update note handler (edit modal submit) ---
-  const handleUpdateNote = useCallback(
+  const updateNote = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!editingNote) return;
-      if (!title.trim()) {
-        setError("Title required");
-        return;
-      }
+      if (!editingNote || !title.trim()) return;
       try {
         setError(null);
-        const updated = await updateNoteApi(editingNote._id, { title: title.trim(), body: body.trim() || undefined });
-        setNotes((prev) => prev.map((n) => (n._id === updated._id ? updated : n)));
-        setEditingNote(null);
-        setShowEditModal(false);
+        const res = await api.put<NoteResponse>(`/notes/${editingNote._id}`, {
+          title: title.trim(),
+          body: body.trim(),
+        });
+        setNotes((prev) =>
+          prev.map((n) => (n._id === editingNote._id ? res.data.note : n))
+        );
         setTitle("");
         setBody("");
-      } catch (err) {
+        setEditingNote(null);
+        setShowEditModal(false);
+      } catch {
         setError("Failed to update note");
       }
     },
-    [editingNote, title, body]
+    [title, body, editingNote]
   );
 
   const handleEdit = useCallback((note: Note) => {
@@ -182,28 +153,24 @@ export default function Dashboard() {
     setNoteToDelete(null);
   }, []);
 
-  const confirmDeleteNote = useCallback(
-    async () => {
-      if (!noteToDelete) return;
-      try {
-        setError(null);
-        await api.delete(`/notes/${noteToDelete._1?._id ? noteToDelete._1._id : noteToDelete._id}`);
-        // (Above fallback is defensive; primary is noteToDelete._id)
-        setNotes((prev) => prev.filter((n) => n._id !== noteToDelete._id));
-        closeDeleteModal();
-      } catch (err) {
-        setError("Failed to delete note");
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [noteToDelete, closeDeleteModal]
-  );
+  const confirmDeleteNote = useCallback(async () => {
+    if (!noteToDelete) return;
+    try {
+      setError(null);
+      await api.delete(`/notes/${noteToDelete._id}`);
+      setNotes((prev) => prev.filter((n) => n._id !== noteToDelete._id));
+      closeDeleteModal();
+    } catch {
+      setError("Failed to delete note");
+    }
+  }, [noteToDelete, closeDeleteModal]);
 
-  // simpler delete opener for list items
   const deleteNote = useCallback(
     (id: string) => {
       const note = notes.find((n) => n._id === id);
-      if (note) openDeleteModal(note);
+      if (note) {
+        openDeleteModal(note);
+      }
     },
     [notes, openDeleteModal]
   );
@@ -212,12 +179,11 @@ export default function Dashboard() {
     try {
       await api.post("/auth/logout");
     } catch {
-      // ignore logout errors
+      // ignore
     } finally {
       nav("/login");
     }
   }, [nav]);
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
